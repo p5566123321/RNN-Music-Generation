@@ -1,0 +1,6 @@
+.DS_Store
+model/*
+__pycache__/*
+/midi_files/*
+vocab/*
+output/*
