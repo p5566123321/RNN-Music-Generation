@@ -65,12 +65,22 @@ class MusicGenerator:
         
         for note_int in sequence:
             if note_int in self.preprocessor.int_to_note:
-                note = self.preprocessor.int_to_note[note_int]
+                note_data = self.preprocessor.int_to_note[note_int]
                 
-                track.append(mido.Message('note_on', channel=0, 
-                                        note=note, velocity=64, time=0))
-                track.append(mido.Message('note_off', channel=0, 
-                                        note=note, velocity=64, time=time_per_note))
+                # Handle both simple notes (int) and pitch-duration tuples
+                if isinstance(note_data, tuple):
+                    pitch, duration = note_data
+                    note_duration = duration if duration > 0 else time_per_note
+                else:
+                    pitch = note_data
+                    note_duration = time_per_note
+                
+                # Ensure pitch is within valid MIDI range
+                if 0 <= pitch <= 127:
+                    track.append(mido.Message('note_on', channel=0, 
+                                            note=pitch, velocity=64, time=0))
+                    track.append(mido.Message('note_off', channel=0, 
+                                            note=pitch, velocity=64, time=note_duration))
         
         mid.save(output_file)
         print(f"MIDI file saved as: {output_file}")

@@ -6,7 +6,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from data_preprocessing import MIDIPreprocessor
 from model import MusicRNN
-from paths import MODEL_FILE, VOCAB_FILE, DEFAULT_OUTPUT_FILE, MIDI_DIR
+from paths import MODEL_FILE, VOCAB_FILE, MIDI_DIR
+import argparse
 
 class MusicDataset(Dataset):
     def __init__(self, X, y):
@@ -80,10 +81,22 @@ class MusicTrainer:
         plt.show()
 
 def main():
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--enhanced", action="store_true", default=False, help="enable enhanced mode")
+    parser.add_argument('--epochs', type=int, default=50,
+                       help='epochs to train the model')
+    parser.add_argument('--lr', type=float, default=0.001,
+                       help='lr to train the model')
+    
+    enhanced_mode = parser.parse_args().enhanced
+    epochs = parser.parse_args().epochs
+    lr = parser.parse_args().lr
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    preprocessor = MIDIPreprocessor(sequence_length=100)
+    preprocessor = MIDIPreprocessor(sequence_length=100, enhanced_mode=enhanced_mode)
     
     X, y = preprocessor.preprocess_dataset(MIDI_DIR)
     
@@ -96,7 +109,7 @@ def main():
                      embedding_dim=128, hidden_dim=256, num_layers=2)
 
     trainer = MusicTrainer(model, str(device))
-    trainer.train(dataloader, epochs=10, lr=0.0001)
+    trainer.train(dataloader, epochs=epochs, lr=lr)
     
     trainer.save_model(MODEL_FILE)
     trainer.plot_losses()
