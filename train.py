@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -65,6 +66,9 @@ class MusicTrainer:
         print("Training completed!")
         
     def save_model(self, filepath):
+        
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'vocab_size': self.model.vocab_size,

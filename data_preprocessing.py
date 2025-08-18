@@ -185,6 +185,10 @@ class MIDIPreprocessor:
                 'special_tokens': self.special_tokens,
                 'current_token_id': self.current_token_id
             })
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
         with open(filepath, 'wb') as f:
             pickle.dump(vocab_data, f)
     
