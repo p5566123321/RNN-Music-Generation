@@ -95,10 +95,52 @@ class EnhancedMusicGenerator:
             
         return seed[:self.preprocessor.sequence_length]
     
+    def create_seed_from_midi(self, midi_file):
+        """Create seed sequence from a MIDI file for enhanced mode."""
+        import os
+        if not os.path.exists(midi_file):
+            raise FileNotFoundError(f"MIDI file not found: {midi_file}")
+            
+        # Temporarily store the current token mapping
+        original_token_to_int = self.preprocessor.token_to_int.copy()
+        original_int_to_token = self.preprocessor.int_to_token.copy()
+        original_current_token_id = self.preprocessor.current_token_id
+        
+        try:
+            # Process MIDI file using enhanced mode
+            tokens = self.preprocessor.midi_to_notes(midi_file)
+            
+            # Filter tokens to only include those in the loaded vocabulary
+            vocab_size = len(original_token_to_int)
+            filtered_tokens = []
+            
+            for token in tokens:
+                if token < vocab_size:
+                    filtered_tokens.append(token)
+                else:
+                    # Replace unknown tokens with PAD
+                    filtered_tokens.append(self.preprocessor.special_tokens['PAD'])
+            
+            # Return the last sequence_length tokens as seed
+            if len(filtered_tokens) >= self.preprocessor.sequence_length:
+                return filtered_tokens[-self.preprocessor.sequence_length:]
+            else:
+                # If MIDI is shorter than sequence_length, pad with PAD tokens
+                seed = filtered_tokens + [self.preprocessor.special_tokens['PAD']] * (self.preprocessor.sequence_length - len(filtered_tokens))
+                return seed[:self.preprocessor.sequence_length]
+                
+        finally:
+            # Restore original token mapping to prevent vocab expansion
+            self.preprocessor.token_to_int = original_token_to_int
+            self.preprocessor.int_to_token = original_int_to_token
+            self.preprocessor.current_token_id = original_current_token_id
+    
     def generate_to_midi(self, output_file, length=500, temperature=1.0, 
-                        seed_notes=None, bpm=120):
+                        seed_notes=None, seed_midi=None, bpm=120):
         """Generate enhanced sequence and convert directly to MIDI."""
-        if seed_notes:
+        if seed_midi:
+            seed_sequence = self.create_seed_from_midi(seed_midi)
+        elif seed_notes:
             seed_sequence = self.create_musical_seed(seed_notes)
         else:
             seed_sequence = None
@@ -127,6 +169,8 @@ def main():
                        help='Sampling temperature (higher = more random)')
     parser.add_argument('--seed', type=str, default=None,
                        help='Comma-separated seed notes (e.g., "60,62,64")')
+    parser.add_argument('--seed-midi', type=str, default=None,
+                       help='Path to MIDI file to use as seed input')
     parser.add_argument('--bpm', type=int, default=120,
                        help='Beats per minute (BPM) for the generated music')
     
@@ -137,11 +181,17 @@ def main():
     try:
         generator = EnhancedMusicGenerator(args.model, args.vocab, device.type)
         
-        if args.seed:
+        if args.seed_midi:
+            seed_notes = None
+            seed_midi = args.seed_midi
+            print(f"Using MIDI seed from: {args.seed_midi}")
+        elif args.seed:
             seed_notes = [int(note) for note in args.seed.split(',')]
+            seed_midi = None
             print(f"Using seed notes: {seed_notes}")
         else:
             seed_notes = None
+            seed_midi = None
             print("Using default musical seed")
         
         print(f"Generating {args.length} tokens with temperature {args.temperature}...")
@@ -149,7 +199,7 @@ def main():
         
         generator.generate_to_midi(
             args.output, args.length, args.temperature, 
-            seed_notes, args.bpm
+            seed_notes, seed_midi, args.bpm
         )
         
         print("Enhanced music generation completed!")

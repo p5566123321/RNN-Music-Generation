@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 from model import MusicRNN, MusicGRU
@@ -46,6 +47,33 @@ class MusicGenerator:
         int_notes = [self.preprocessor.note_to_int.get(note, 0) for note in notes]
         return int_notes[-self.preprocessor.sequence_length:]
     
+    def create_seed_from_midi(self, midi_file):
+        """Create seed sequence from a MIDI file."""
+        notes = self.preprocessor.midi_to_notes(midi_file)
+        
+        if self.preprocessor.enhanced_mode:
+            # In enhanced mode, notes are already token integers
+            int_notes = notes
+        else:
+            # Convert notes to integers using vocabulary
+            int_notes = []
+            for note in notes:
+                if isinstance(note, tuple):
+                    # Handle pitch-duration tuples by using the note tuple as key
+                    int_val = self.preprocessor.note_to_int.get(note, 0)
+                else:
+                    # Handle simple note numbers
+                    int_val = self.preprocessor.note_to_int.get(note, 0)
+                int_notes.append(int_val)
+        
+        # Return the last sequence_length notes as seed
+        if len(int_notes) >= self.preprocessor.sequence_length:
+            return int_notes[-self.preprocessor.sequence_length:]
+        else:
+            # If MIDI is shorter than sequence_length, pad with zeros or repeat
+            seed = int_notes + [0] * (self.preprocessor.sequence_length - len(int_notes))
+            return seed[:self.preprocessor.sequence_length]
+    
     def random_seed(self):
         """Create random seed sequence."""
         return [random.randint(0, self.preprocessor.vocab_size - 1) 
@@ -82,6 +110,7 @@ class MusicGenerator:
                     track.append(mido.Message('note_off', channel=0, 
                                             note=pitch, velocity=64, time=note_duration))
         
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         mid.save(output_file)
         print(f"MIDI file saved as: {output_file}")
 
@@ -99,6 +128,8 @@ def main():
                        help='Sampling temperature (higher = more random)')
     parser.add_argument('--seed', type=str, default=None,
                        help='Comma-separated seed notes (e.g., "60,62,64")')
+    parser.add_argument('--seed-midi', type=str, default=None,
+                       help='Path to MIDI file to use as seed input')
     parser.add_argument('--bpm', type=int, default=120,
                        help='Beats per minute (BPM) for the generated music')
     
@@ -108,7 +139,13 @@ def main():
     
     generator = MusicGenerator(args.model, args.vocab, device.type)
     
-    if args.seed:
+    if args.seed_midi:
+        if not os.path.exists(args.seed_midi):
+            print(f"Error: Seed MIDI file not found: {args.seed_midi}")
+            return
+        seed_sequence = generator.create_seed_from_midi(args.seed_midi)
+        print(f"Using MIDI seed from: {args.seed_midi}")
+    elif args.seed:
         seed_notes = [int(note) for note in args.seed.split(',')]
         seed_sequence = generator.create_seed_from_notes(seed_notes)
         print(f"Using seed notes: {seed_notes}")
